@@ -316,7 +316,6 @@ async function loadAllSessionRecords() {
     return records.sort((a, b) => a.completedAt - b.completedAt);
   } catch (e) { return []; }
 }
-}
 
 /** Per-player { avgPoints, winRate, gamesPlayed } for one stored session record. */
 function computeSessionPlayerStats(record) {
