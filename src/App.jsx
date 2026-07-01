@@ -299,16 +299,10 @@ async function clearAuthLocally() {
 /* Persistent session storage (per-user, not shared)                      */
 /* ---------------------------------------------------------------------- */
 
-// NOTE: this is an interim local-only store (per-browser, not cross-device).
-// Once games/sessions are wired to Supabase tables (see schema_v2.sql),
-// history should be loaded from the database instead so it's shared across
-// every device/member in the group rather than living only in this browser.
 async function saveSessionRecord(record) {
   try {
     localStorage.setItem(`session:${record.id}`, JSON.stringify(record));
-  } catch (e) {
-    console.error('Failed to save session', e);
-  }
+  } catch (e) { console.error('Failed to save session', e); }
 }
 
 async function loadAllSessionRecords() {
@@ -317,15 +311,11 @@ async function loadAllSessionRecords() {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key || !key.startsWith('session:')) continue;
-      try {
-        records.push(JSON.parse(localStorage.getItem(key)));
-      } catch (e) { /* skip unreadable entries */ }
+      try { records.push(JSON.parse(localStorage.getItem(key))); } catch (e) { /* skip */ }
     }
     return records.sort((a, b) => a.completedAt - b.completedAt);
-  } catch (e) {
-    console.error('Failed to load sessions', e);
-    return [];
-  }
+  } catch (e) { return []; }
+}
 }
 
 /** Per-player { avgPoints, winRate, gamesPlayed } for one stored session record. */
@@ -391,21 +381,21 @@ export default function App() {
     }).catch(() => setOrganizations([]));
   }, [account]);
 
-  const handleSignup = async (phone, pin, displayName) => {
+  const handleSignup = async (email, password, displayName) => {
     setAuthError(''); setAuthLoading(true);
     try {
-      await callEdgeFunction('signup', { phone, pin, displayName });
-      const result = await callEdgeFunction('login', { phone, pin });
+      await callEdgeFunction('signup', { email, password, displayName });
+      const result = await callEdgeFunction('login', { email, password });
       const acc = { accountId: result.accountId, displayName: result.displayName, accessToken: result.accessToken };
       setAccount(acc); saveAuthLocally(acc); setScreen('groups');
     } catch (e) { setAuthError(e.message); }
     setAuthLoading(false);
   };
 
-  const handleLogin = async (phone, pin) => {
+  const handleLogin = async (email, password) => {
     setAuthError(''); setAuthLoading(true);
     try {
-      const result = await callEdgeFunction('login', { phone, pin });
+      const result = await callEdgeFunction('login', { email, password });
       const acc = { accountId: result.accountId, displayName: result.displayName, accessToken: result.accessToken };
       setAccount(acc); saveAuthLocally(acc); setScreen('groups');
     } catch (e) { setAuthError(e.message); }
@@ -1009,13 +999,13 @@ export default function App() {
 
 function LoginScreen({ onLogin, onSignup, error, loading }) {
   const [mode, setMode] = useState('login'); // login | signup
-  const [phone, setPhone] = useState('');
-  const [pin, setPin] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
 
   const submit = () => {
-    if (mode === 'login') onLogin(phone, pin);
-    else onSignup(phone, pin, displayName);
+    if (mode === 'login') onLogin(email, password);
+    else onSignup(email, password, displayName);
   };
 
   return (
@@ -1024,7 +1014,7 @@ function LoginScreen({ onLogin, onSignup, error, loading }) {
         {mode === 'login' ? 'Log in' : 'Create account'}
       </h1>
       <p style={{ color: COLORS.textDim, margin: '0 0 28px', fontSize: 15 }}>
-        Phone number + your 4-digit PIN.
+        {mode === 'login' ? 'Email and password.' : 'Name, email and password.'}
       </p>
 
       {mode === 'signup' && (
@@ -1036,17 +1026,17 @@ function LoginScreen({ onLogin, onSignup, error, loading }) {
         />
       )}
       <input
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        placeholder="+61412345678"
-        inputMode="tel"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email address"
+        inputMode="email"
+        type="email"
         style={inputStyle}
       />
       <input
-        value={pin}
-        onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
-        placeholder="4-digit PIN"
-        inputMode="numeric"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder={mode === 'signup' ? 'Password (min 6 characters)' : 'Password'}
         type="password"
         style={inputStyle}
       />
