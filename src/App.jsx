@@ -236,7 +236,7 @@ const ROSTER_SEED = ['Mick', 'Lee', 'Alan', 'Bruno', 'Sam', 'Tom'];
 /* live (Project Settings → API).                                        */
 /* ---------------------------------------------------------------------- */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5dmxsa3pwdnd0amR3amx1Ym9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNjEyMDYsImV4cCI6MjA5NzkzNzIwNn0.fo9kxO8l3YN1dHVpUVC4I--R9jYa7wUnxPDv9Eh2_Sc';
 
 async function callEdgeFunction(name, body) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
@@ -370,12 +370,9 @@ export default function App() {
 
   useEffect(() => {
     if (!account) return;
-    callRest(
-      `memberships?select=role,organizations(id,name)&account_id=eq.${account.accountId}`,
-      { accessToken: account.accessToken },
-    ).then((rows) => {
-      setOrganizations(rows.map((r) => ({ id: r.organizations.id, name: r.organizations.name, role: r.role })));
-    }).catch(() => setOrganizations([]));
+    callEdgeFunction('get-groups', { userId: account.accountId })
+      .then((groups) => setOrganizations(groups))
+      .catch(() => setOrganizations([]));
   }, [account]);
 
   const handleSignup = async (email, password, displayName) => {
@@ -428,12 +425,9 @@ export default function App() {
   };
 
   const createOrganization = async (name) => {
-    const [org] = await callRest('organizations', {
-      method: 'POST', accessToken: account.accessToken,
-      body: { name, created_by: account.accountId },
-    });
-    setOrganizations((prev) => [...prev, { id: org.id, name: org.name, role: 'owner' }]);
-    setActiveOrg({ id: org.id, name: org.name, role: 'owner' });
+    const org = await callEdgeFunction('create-org', { name, userId: account.accountId });
+    setOrganizations((prev) => [...prev, { id: org.id, name: org.name, role: org.role }]);
+    setActiveOrg({ id: org.id, name: org.name, role: org.role });
     setScreen('setup');
   };
 
