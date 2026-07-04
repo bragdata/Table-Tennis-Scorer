@@ -300,7 +300,11 @@ async function clearAuthLocally() {
 /* ---------------------------------------------------------------------- */
 
 async function saveSessionRecord(record) {
-  try { localStorage.setItem(`session:${record.id}`, JSON.stringify(record)); } catch (e) { console.error('Failed to save session', e); }
+  try {
+    localStorage.setItem(`session:${record.id}`, JSON.stringify(record));
+  } catch (e) {
+    console.error('Failed to save session', e);
+  }
 }
 
 async function loadAllSessionRecords() {
@@ -309,10 +313,13 @@ async function loadAllSessionRecords() {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key || !key.startsWith('session:')) continue;
-      try { records.push(JSON.parse(localStorage.getItem(key))); } catch (e) { /* skip */ }
+      try { records.push(JSON.parse(localStorage.getItem(key))); } catch (e) { }
     }
     return records.sort((a, b) => a.completedAt - b.completedAt);
-  } catch (e) { return []; }
+  } catch (e) {
+    console.error('Failed to load sessions', e);
+    return [];
+  }
 }
 
 /** Per-player { avgPoints, winRate, gamesPlayed } for one stored session record. */
@@ -436,6 +443,24 @@ export default function App() {
     setOrganizations((prev) => [...prev, org]);
     setActiveOrg(org);
     setScreen('setup');
+  };
+
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  const generateInviteCode = async () => {
+    if (!activeOrg) return;
+    setInviteLoading(true);
+    try {
+      const result = await callEdgeFunction('invite-code', {
+        organizationId: activeOrg.id,
+        userId: account.accountId,
+      });
+      setInviteCode(result.code);
+    } catch (e) {
+      setInviteCode('Error generating code');
+    }
+    setInviteLoading(false);
   };
   const [historyRecords, setHistoryRecords] = useState([]);
   const [selectedTrendPlayers, setSelectedTrendPlayers] = useState([]);
@@ -650,15 +675,24 @@ export default function App() {
       <Shell>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
+            <div style={{ fontSize: 12, color: COLORS.accentDim, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 2 }}>
+              {activeOrg?.name}
+            </div>
             <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, color: COLORS.textPrimary, margin: '0 0 4px' }}>
               New session
             </h1>
             <p style={{ color: COLORS.textDim, margin: '0 0 28px', fontSize: 15 }}>Set up who's playing and how.</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-            <Button variant="ghost" onClick={handleLogout} style={{ padding: '8px 14px', fontSize: 13 }}>Log out</Button>
-            <Button variant="ghost" onClick={() => setScreen('groups')} style={{ padding: '8px 14px', fontSize: 13 }}>Switch group</Button>
-            <Button variant="ghost" onClick={() => setScreen('history')} style={{ padding: '8px 14px', fontSize: 13 }}>History</Button>
+            <Button variant="ghost" onClick={handleLogout} style={{ padding: '8px 14px', fontSize: 13 }}>
+              Log out
+            </Button>
+            <Button variant="ghost" onClick={() => setScreen('groups')} style={{ padding: '8px 14px', fontSize: 13 }}>
+              Switch group
+            </Button>
+            <Button variant="ghost" onClick={() => setScreen('history')} style={{ padding: '8px 14px', fontSize: 13 }}>
+              History
+            </Button>
           </div>
         </div>
 
@@ -878,7 +912,7 @@ export default function App() {
   if (screen === 'summary') {
     return (
       <Shell>
-        <TopBar onSummary={null} title="Session summary" />
+        <TopBar onSummary={null} title="Scoreboard" onBackToGame={session ? () => setScreen('live') : null} />
         {session?.type === 'singles' ? (
           <>
             <p style={{ color: COLORS.textPrimary, fontSize: 17, marginBottom: 18 }}>
@@ -909,9 +943,16 @@ export default function App() {
         ) : (
           <p style={{ color: COLORS.textDim }}>No session yet.</p>
         )}
-        <Button variant="secondary" style={{ marginTop: 24 }} onClick={() => { setSession(null); setScreen('setup'); }}>
-          New session
-        </Button>
+        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+          {session && (
+            <Button variant="secondary" style={{ flex: 1 }} onClick={() => setScreen('live')}>
+              ← Back to game
+            </Button>
+          )}
+          <Button variant="ghost" style={{ flex: 1 }} onClick={() => { setSession(null); setScreen('setup'); }}>
+            End & new session
+          </Button>
+        </div>
       </Shell>
     );
   }
@@ -936,7 +977,10 @@ export default function App() {
     return (
       <Shell>
         <TopBar onSummary={null} title="History & trends" />
-        <Button variant="ghost" onClick={() => setScreen('setup')} style={{ marginBottom: 18 }}>← Back to setup</Button>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+          {session && <Button variant="secondary" onClick={() => setScreen('live')} style={{ flex: 1 }}>← Back to game</Button>}
+          <Button variant="ghost" onClick={() => setScreen('setup')} style={{ flex: 1 }}>← Back to setup</Button>
+        </div>
 
         {sorted.length === 0 ? (
           <p style={{ color: COLORS.textDim }}>No completed sessions yet — finish a session to start building history.</p>
@@ -1073,33 +1117,48 @@ const inputStyle = {
   fontFamily: "'Space Grotesk', sans-serif", marginBottom: 12,
 };
 
-
 function InviteCodeSection({ org, userId }) {
-  const [code, setCode] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const generate = async () => {
     setLoading(true);
     try {
       const result = await callEdgeFunction('invite-code', { organizationId: org.id, userId });
       setCode(result.code);
-    } catch (e) { setCode('Error - try again'); }
+    } catch (e) { setCode('Error — try again'); }
     setLoading(false);
   };
+
   return (
-    React.createElement('div', { style: { background: '#1D3027', borderRadius: '0 0 14px 14px', padding: '12px 16px', border: '1px solid #2C4439', borderTop: 'none' } },
-      code
-        ? React.createElement(React.Fragment, null,
-            React.createElement('div', { style: { fontFamily: "Fraunces, serif", fontSize: 32, letterSpacing: 8, color: '#D9F23D', textAlign: 'center', padding: '8px 0' } }, code),
-            React.createElement('p', { style: { color: '#9FB3A8', fontSize: 11, textAlign: 'center', margin: '0 0 10px' } }, 'Share this code — anyone with it can join ' + org.name + '. Expires when you generate a new one.'),
-            React.createElement('button', { onClick: generate, style: { width: '100%', padding: '8px 0', fontSize: 13, background: 'transparent', border: '1px solid #2C4439', borderRadius: 10, color: '#9FB3A8', cursor: 'pointer' } }, 'Generate new code')
-          )
-        : React.createElement('button', { onClick: generate, disabled: loading, style: { width: '100%', padding: '8px 0', fontSize: 13, background: '#1D3027', border: '1px solid #2C4439', borderRadius: 10, color: '#F2F7F0', cursor: 'pointer' } },
-            loading ? 'Generating...' : '+ Invite someone to ' + org.name
-          )
-    )
+    <div style={{
+      background: COLORS.surfaceRaised, borderRadius: '0 0 14px 14px',
+      padding: '12px 16px', border: `1px solid ${COLORS.line}`, borderTop: 'none',
+    }}>
+      {code ? (
+        <>
+          <div style={{
+            fontFamily: "'Fraunces', serif", fontSize: 32, letterSpacing: 8,
+            color: COLORS.accent, textAlign: 'center', padding: '8px 0',
+          }}>{code}</div>
+          <p style={{ color: COLORS.textDim, fontSize: 11, textAlign: 'center', margin: '0 0 10px' }}>
+            Share this code — anyone with it can join {org.name}. Expires when you generate a new one.
+          </p>
+          <Button variant="ghost" onClick={generate} style={{ width: '100%', padding: '8px 0', fontSize: 13 }}>
+            Generate new code
+          </Button>
+        </>
+      ) : (
+        <Button variant="ghost" onClick={generate} disabled={loading} style={{ width: '100%', padding: '8px 0', fontSize: 13 }}>
+          {loading ? 'Generating…' : '+ Invite someone to ' + org.name}
+        </Button>
+      )}
+    </div>
   );
 }
+
 function GroupsScreen({ account, organizations, onSelectOrg, onCreateOrg, onJoinOrg, onLogout }) {
+  const userId = account.accountId;
   const [newGroupName, setNewGroupName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1120,29 +1179,39 @@ function GroupsScreen({ account, organizations, onSelectOrg, onCreateOrg, onJoin
 
   return (
     <Shell>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
-        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, color: COLORS.textPrimary, margin: 0 }}>
+      <div>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, color: COLORS.textPrimary, margin: '0 0 4px' }}>
           Hi, {account.displayName}
         </h1>
-        <Button variant="ghost" onClick={onLogout} style={{ padding: '8px 14px', fontSize: 13 }}>Log out</Button>
+        <p style={{ color: COLORS.textDim, fontSize: 14, margin: '0 0 24px' }}>Choose a group to play, or create a new one.</p>
       </div>
 
       <SectionLabel>Your groups</SectionLabel>
       {organizations.length === 0 && (
-        <p style={{ color: COLORS.textDim, fontSize: 14, marginBottom: 18 }}>You're not in any groups yet.</p>
+        <p style={{ color: COLORS.textDim, fontSize: 14, marginBottom: 18 }}>You're not in any groups yet — create one below.</p>
       )}
       {organizations.map((org) => (
-        <div
-          key={org.id}
-          onClick={() => onSelectOrg(org)}
-          style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10,
-            padding: '14px 16px', marginBottom: 8, cursor: 'pointer',
-          }}
-        >
-          <span style={{ color: COLORS.textPrimary, fontWeight: 600 }}>{org.name}</span>
-          <span style={{ color: COLORS.textDim, fontSize: 12 }}>{org.role}</span>
+        <div key={org.id} style={{ marginBottom: 10 }}>
+          <div
+            onClick={() => onSelectOrg(org)}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: COLORS.surface, border: `2px solid ${COLORS.accent}33`, borderRadius: 14,
+              padding: '18px 20px', cursor: 'pointer',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+            onMouseLeave={e => e.currentTarget.style.borderColor = `${COLORS.accent}33`}
+          >
+            <div>
+              <div style={{ color: COLORS.textPrimary, fontWeight: 700, fontSize: 18 }}>{org.name}</div>
+              <div style={{ color: COLORS.textDim, fontSize: 12, marginTop: 2 }}>Tap to play · {org.role}</div>
+            </div>
+            <div style={{ color: COLORS.accent, fontSize: 24, fontWeight: 700 }}>→</div>
+          </div>
+          {(org.role === 'owner' || org.role === 'admin') && (
+            <InviteCodeSection org={org} userId={userId} />
+          )}
         </div>
       ))}
 
@@ -1158,6 +1227,10 @@ function GroupsScreen({ account, organizations, onSelectOrg, onCreateOrg, onJoin
       <div style={{ display: 'flex', gap: 8 }}>
         <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="Invite code" style={{ ...inputStyle, marginBottom: 0 }} />
         <Button onClick={join} disabled={busy}>Join</Button>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 28, paddingTop: 20 }}>
+        <Button variant="ghost" onClick={onLogout} style={{ width: '100%' }}>Log out</Button>
       </div>
     </Shell>
   );
@@ -1183,11 +1256,14 @@ function SectionLabel({ children }) {
     </div>
   );
 }
-function TopBar({ title, onSummary }) {
+function TopBar({ title, onSummary, onBackToGame }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
       <h2 style={{ fontFamily: "'Fraunces', serif", color: COLORS.textPrimary, fontSize: 22, margin: 0 }}>{title}</h2>
-      {onSummary && <Button variant="ghost" onClick={onSummary} style={{ padding: '8px 14px', fontSize: 13 }}>Summary</Button>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {onBackToGame && <Button variant="secondary" onClick={onBackToGame} style={{ padding: '8px 14px', fontSize: 13 }}>← Back to game</Button>}
+        {onSummary && <Button variant="ghost" onClick={onSummary} style={{ padding: '8px 14px', fontSize: 13 }}>Scoreboard</Button>}
+      </div>
     </div>
   );
 }
@@ -1317,8 +1393,8 @@ function WinEntryPane({ name, sub, games, color, isWinner, winnerScore, onWinner
   );
 }
 const stepperBtnStyle = {
-  width: 34, height: 34, flexShrink: 0, borderRadius: 999, border: `1px solid ${COLORS.line}`,
-  background: COLORS.surfaceRaised, color: COLORS.textPrimary, fontSize: 18, cursor: 'pointer',
+  width: 52, height: 52, flexShrink: 0, borderRadius: 999, border: `1px solid ${COLORS.line}`,
+  background: COLORS.surfaceRaised, color: COLORS.textPrimary, fontSize: 24, cursor: 'pointer',
   fontFamily: "'Space Grotesk', sans-serif",
 };
 
