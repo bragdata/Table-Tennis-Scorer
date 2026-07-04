@@ -655,9 +655,11 @@ export default function App() {
             </h1>
             <p style={{ color: COLORS.textDim, margin: '0 0 28px', fontSize: 15 }}>Set up who's playing and how.</p>
           </div>
-          <Button variant="ghost" onClick={() => setScreen('history')} style={{ padding: '8px 14px', fontSize: 13 }}>
-            History
-          </Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            <Button variant="ghost" onClick={handleLogout} style={{ padding: '8px 14px', fontSize: 13 }}>Log out</Button>
+            <Button variant="ghost" onClick={() => setScreen('groups')} style={{ padding: '8px 14px', fontSize: 13 }}>Switch group</Button>
+            <Button variant="ghost" onClick={() => setScreen('history')} style={{ padding: '8px 14px', fontSize: 13 }}>History</Button>
+          </div>
         </div>
 
         <SectionLabel>Match type</SectionLabel>
