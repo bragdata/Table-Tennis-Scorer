@@ -432,8 +432,7 @@ export default function App() {
   };
 
   const joinOrganization = async (code) => {
-    const [result] = await callRpc('join_organization', { accessToken: account.accessToken, args: { invite_code: code } });
-    const org = { id: result.organization_id, name: result.organization_name, role: 'member' };
+    const org = await callEdgeFunction('join-org', { code, userId: account.accountId });
     setOrganizations((prev) => [...prev, org]);
     setActiveOrg(org);
     setScreen('setup');
