@@ -469,10 +469,24 @@ export default function App() {
   useEffect(() => {
     loadAllSessionRecords().then(setHistoryRecords);
   }, []);
-  const [roster, setRoster] = useState(ROSTER_SEED);
+  const [roster, setRoster] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [matchType, setMatchType] = useState('rotation_doubles'); // singles | rotation_doubles
-  const [selectedPlayers, setSelectedPlayers] = useState(['Mick', 'Lee', 'Alan', 'Bruno']);
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+
+  useEffect(() => {
+    if (!activeOrg) return;
+    setRosterLoading(true);
+    callEdgeFunction('get-members', { organizationId: activeOrg.id })
+      .then((members) => {
+        const names = members.map(m => m.name);
+        setRoster(names);
+        setSelectedPlayers(names);
+      })
+      .catch(() => setRoster([]))
+      .finally(() => setRosterLoading(false));
+  }, [activeOrg?.id]);
   const [bestOf, setBestOf] = useState(3);
   const [lengthMode, setLengthMode] = useState('flowing'); // fixed | flowing
   const [fixedCount, setFixedCount] = useState(6);
