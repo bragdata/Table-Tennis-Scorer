@@ -475,6 +475,7 @@ export default function App() {
   const [matchType, setMatchType] = useState('rotation_doubles'); // singles | rotation_doubles
   const [selectedPlayers, setSelectedPlayers] = useState([]);
 
+  // Load real group members whenever the active org changes
   useEffect(() => {
     if (!activeOrg) return;
     setRosterLoading(true);
@@ -482,7 +483,7 @@ export default function App() {
       .then((members) => {
         const names = members.map(m => m.name);
         setRoster(names);
-        setSelectedPlayers(names);
+        setSelectedPlayers(names); // pre-select all members
       })
       .catch(() => setRoster([]))
       .finally(() => setRosterLoading(false));
@@ -717,6 +718,8 @@ export default function App() {
         </div>
 
         <SectionLabel>{matchType === 'singles' ? 'Pick 2 players' : 'Pick 4 or more players'}</SectionLabel>
+        {rosterLoading && <p style={{ color: COLORS.textDim, fontSize: 13 }}>Loading members…</p>}
+        {!rosterLoading && roster.length === 0 && <p style={{ color: COLORS.textDim, fontSize: 13 }}>No members found — add players below.</p>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           {roster.map((p) => (
             <Chip key={p} active={selectedPlayers.includes(p)} onClick={() => togglePlayer(p)}>{p}</Chip>
