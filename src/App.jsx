@@ -300,9 +300,7 @@ async function clearAuthLocally() {
 /* ---------------------------------------------------------------------- */
 
 async function saveSessionRecord(record) {
-  try {
-    localStorage.setItem(`session:${record.id}`, JSON.stringify(record));
-  } catch (e) { console.error('Failed to save session', e); }
+  try { localStorage.setItem(`session:${record.id}`, JSON.stringify(record)); } catch (e) { console.error('Failed to save session', e); }
 }
 
 async function loadAllSessionRecords() {
@@ -384,8 +382,19 @@ export default function App() {
     setAuthError(''); setAuthLoading(true);
     try {
       await callEdgeFunction('signup', { email, password, displayName });
-      const result = await callEdgeFunction('login', { email, password });
-      const acc = { accountId: result.accountId, displayName: result.displayName, accessToken: result.accessToken };
+      // Sign in directly via Supabase auth API after signup
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error_description || data.msg || 'Login failed');
+      const acc = {
+        accountId: data.user.id,
+        displayName: data.user.user_metadata?.display_name ?? email,
+        accessToken: data.access_token,
+      };
       setAccount(acc); saveAuthLocally(acc); setScreen('groups');
     } catch (e) { setAuthError(e.message); }
     setAuthLoading(false);
@@ -394,8 +403,19 @@ export default function App() {
   const handleLogin = async (email, password) => {
     setAuthError(''); setAuthLoading(true);
     try {
-      const result = await callEdgeFunction('login', { email, password });
-      const acc = { accountId: result.accountId, displayName: result.displayName, accessToken: result.accessToken };
+      // Call Supabase auth API directly — no Edge Function needed
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error_description || data.msg || 'Incorrect email or password');
+      const acc = {
+        accountId: data.user.id,
+        displayName: data.user.user_metadata?.display_name ?? email,
+        accessToken: data.access_token,
+      };
       setAccount(acc); saveAuthLocally(acc); setScreen('groups');
     } catch (e) { setAuthError(e.message); }
     setAuthLoading(false);
